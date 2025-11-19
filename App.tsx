@@ -2,32 +2,34 @@ import React, { useState, useEffect } from 'react';
 import { Signature } from './types';
 import Stats from './components/Stats';
 import SignForm from './components/SignForm';
-import { AlertTriangle, Users, ShieldBan, Lock, Scale, Share2, MapPin, School, History } from 'lucide-react';
+import { subscribeToSignatures, addSignature, isOnline } from './services/firebase';
+import { AlertTriangle, Users, ShieldBan, Lock, Scale, Share2, MapPin, School, History, Globe, WifiOff } from 'lucide-react';
 
 const App: React.FC = () => {
-  // Load from localStorage initially
-  // CHANGED KEY TO RESET VOTES: 'signatures_porto_mangue_final'
-  const [signatures, setSignatures] = useState<Signature[]>(() => {
-    try {
-      const saved = localStorage.getItem('signatures_porto_mangue_final');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
-  });
+  const [signatures, setSignatures] = useState<Signature[]>([]);
+  const [isSystemOnline, setIsSystemOnline] = useState(true);
 
-  // Save to localStorage whenever signatures change
+  // Carrega assinaturas
   useEffect(() => {
-    localStorage.setItem('signatures_porto_mangue_final', JSON.stringify(signatures));
-  }, [signatures]);
+    setIsSystemOnline(isOnline());
+    
+    // Inicia o sistema de sincronização automática
+    const unsubscribe = subscribeToSignatures((updatedSignatures) => {
+      setSignatures(updatedSignatures);
+    });
 
-  const handleSign = (newSig: Omit<Signature, 'id' | 'timestamp'>) => {
-    const signature: Signature = {
-      ...newSig,
-      id: Math.random().toString(36).substr(2, 9),
-      timestamp: Date.now(),
+    return () => {
+        if (typeof unsubscribe === 'function') unsubscribe();
     };
-    setSignatures((prev) => [signature, ...prev]);
+  }, []);
+
+  const handleSign = async (newSig: Omit<Signature, 'id' | 'timestamp'>) => {
+    try {
+      await addSignature(newSig);
+      // O polling automático vai atualizar a lista em breve
+    } catch (error) {
+      // Erro já tratado no service
+    }
   };
 
   const handleShare = () => {
@@ -38,6 +40,11 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-12">
+      {/* Status Bar Simplificada */}
+      <div className="w-full py-1 px-4 text-[10px] md:text-xs font-bold text-center flex justify-center items-center gap-2 bg-blue-900/20 text-blue-400 border-b border-blue-900/30">
+        <Globe size={10} /> SISTEMA DE VOTAÇÃO GLOBAL • SINCRONIZAÇÃO ATIVADA
+      </div>
+
       {/* Hero Section */}
       <header className="bg-red-950 border-b border-red-900/50 pt-8 pb-16 px-4 text-center relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-600 via-orange-500 to-red-600"></div>
@@ -152,6 +159,9 @@ const App: React.FC = () => {
                   <Users size={48} className="mx-auto text-slate-700 mb-3" />
                   <p className="text-slate-500 font-medium">A lista está vazia.</p>
                   <p className="text-slate-400 text-sm mt-1">Seja o primeiro a assinar e mostre a força da nossa turma!</p>
+                  {isSystemOnline === false && (
+                     <p className="text-yellow-500 text-xs mt-4 font-bold">Você parece estar offline. Conecte-se para ver a lista completa.</p>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
@@ -202,12 +212,6 @@ const App: React.FC = () => {
                 >
                   Compartilhar no WhatsApp
                 </button>
-              </div>
-
-              <div className="bg-red-950/30 p-4 rounded-lg border border-red-900/30 text-center">
-                <p className="text-red-400 text-xs font-medium uppercase tracking-wider">
-                  Sistema Seguro &bull; Voto Único &bull; 9º U
-                </p>
               </div>
             </div>
           </div>
